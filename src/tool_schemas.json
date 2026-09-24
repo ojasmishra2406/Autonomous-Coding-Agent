@@ -1,0 +1,108 @@
+[
+  {
+    "name": "list_files",
+    "description": "List files in a directory, respecting .gitignore. Use this to explore the project structure.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "path": {
+          "type": "STRING",
+          "description": "The directory path to list files for. Use '.' for the repository root."
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "read_file",
+    "description": "Read the contents of a file. Returns the content with line numbers prefixed, which is essential for writing accurate patches.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "path": {
+          "type": "STRING",
+          "description": "The path to the file to read."
+        },
+        "start_line": {
+          "type": "INTEGER",
+          "description": "Optional starting line number (1-indexed)."
+        },
+        "end_line": {
+          "type": "INTEGER",
+          "description": "Optional ending line number (1-indexed)."
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "search_code",
+    "description": "Search for a string or regular expression in the codebase using ripgrep. Returns exact matches with file paths and line numbers.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "query": {
+          "type": "STRING",
+          "description": "The string or regex query to search for."
+        },
+        "path": {
+          "type": "STRING",
+          "description": "Optional path to restrict the search to a specific directory or file."
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "apply_patch",
+    "description": "Apply a unified diff patch to modify the codebase. Keep this as a secondary option if replace_file_content is not suitable.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "diff": {
+          "type": "STRING",
+          "description": "The unified diff string to apply. Must include proper '--- a/file' and '+++ b/file' headers."
+        }
+      },
+      "required": ["diff"]
+    }
+  },
+  {
+    "name": "replace_file_content",
+    "description": "Replaces a specific block of text in a file with new content. HIGHLY RECOMMENDED over apply_patch for most edits.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "file_path": {
+          "type": "STRING",
+          "description": "The path to the file to modify."
+        },
+        "target_content": {
+          "type": "STRING",
+          "description": "The exact block of text to replace. Must match the file content exactly, including whitespace/indentation."
+        },
+        "replacement_content": {
+          "type": "STRING",
+          "description": "The new content to insert in place of the target_content."
+        }
+      },
+      "required": ["file_path", "target_content", "replacement_content"]
+    }
+  },
+  {
+    "name": "run_tests",
+    "description": "Run the test suite inside the sandboxed environment to verify if the issue is resolved.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "test_ids": {
+          "type": "ARRAY",
+          "items": {
+            "type": "STRING"
+          },
+          "description": "Optional list of specific test IDs (e.g. file paths or pytest node IDs) to run. If omitted, runs all tests."
+        }
+      }
+    }
+  }
+]

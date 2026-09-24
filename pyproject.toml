@@ -1,0 +1,28 @@
+[project]
+name = "coding-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Ojas Mishra", email = "mishraojas2406@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "datasets==2.20.0",
+    "docker==7.1.0",
+    "google-genai==1.46.0",
+    "openai==3.16.2",
+    "pydantic==2.8.2",
+    "pytest==8.2.2",
+    "python-dotenv==1.2.3",
+    "structlog==24.4.0",
+    "tiktoken==0.7.0",
+    "unidiff==0.7.5",
+]
+
+[project.scripts]
+coding-agent = "coding_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"

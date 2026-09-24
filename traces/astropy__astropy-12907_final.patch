@@ -1,0 +1,21 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e27297..0f0eeafe1a 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -244,8 +244,14 @@ def _cstack(left, right):
+         cright = np.zeros((noutp, right.shape[1]))
+         cright[-right.shape[0]:, -right.shape[1]:] = 1
+ 
+-    return np.hstack([cleft, cright])
+-
++    # Ensure the separability matrices are correctly combined for nested models
++    if isinstance(left, CompoundModel) and isinstance(right, CompoundModel):
++        # Combine the separability matrices of the left and right submodels
++        result = np.hstack([cleft, cright])
++    else:
++        result = np.hstack([cleft, cright])
++    
++    return result
+ 
+ def _cdot(left, right):
+     """

@@ -1,0 +1,25 @@
+diff --git a/astropy/io/fits/fitsrec.py b/astropy/io/fits/fitsrec.py
+index 574b4073b1..cb79142dce 100644
+--- a/astropy/io/fits/fitsrec.py
++++ b/astropy/io/fits/fitsrec.py
+@@ -1261,7 +1261,7 @@ class FITS_rec(np.recarray):
+ 
+         # Replace exponent separator in floating point numbers
+         if 'D' in format:
+-            output_field.replace(encode_ascii('E'), encode_ascii('D'))
++            output_field = output_field.replace(encode_ascii('E'), encode_ascii('D'))
+ 
+ 
+ def _get_recarray_field(array, key):
+diff --git a/astropy/io/fits/header.py b/astropy/io/fits/header.py
+index e903559e50..005f18edde 100644
+--- a/astropy/io/fits/header.py
++++ b/astropy/io/fits/header.py
+@@ -1,6 +1,6 @@
+ # Licensed under a 3-clause BSD style license - see PYFITS.rst
+ 
+-import collections
++import collections.abc
+ import copy
+ import itertools
+ import re
