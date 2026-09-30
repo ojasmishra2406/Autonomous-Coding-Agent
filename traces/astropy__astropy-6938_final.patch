@@ -11,15 +11,3 @@ index 574b4073b1..cb79142dce 100644
  
  
  def _get_recarray_field(array, key):
-diff --git a/astropy/io/fits/header.py b/astropy/io/fits/header.py
-index e903559e50..005f18edde 100644
---- a/astropy/io/fits/header.py
-+++ b/astropy/io/fits/header.py
-@@ -1,6 +1,6 @@
- # Licensed under a 3-clause BSD style license - see PYFITS.rst
- 
--import collections
-+import collections.abc
- import copy
- import itertools
- import re

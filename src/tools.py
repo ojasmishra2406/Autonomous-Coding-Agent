@@ -1,28 +1,45 @@
 import json
 import shlex
 import os
+import base64
 from typing import List, Dict, Optional, Any
 from unidiff import PatchSet
 from unidiff.errors import UnidiffParseError
 from src.sandbox import Sandbox
 from src.test_selector import TestSelector
 
+def _truncate(text: str, max_len: int = 2000) -> str:
+    """Helper to truncate middle of long outputs."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    if len(text) > max_len:
+        keep = max_len // 2
+        return text[:keep] + f"\n... [{len(text) - max_len} characters truncated] ...\n" + text[-keep:]
+    return text
+
 class AgentTools:
     """
-    Collection of 5 minimal tools that the coding agent can use to interact
-    with the repository.
+    Collection of tools that the coding agent can use to interact with the repository.
     """
     
     def __init__(self, sandbox: Sandbox):
         self.sandbox = sandbox
         self.changed_files = set()
         self.test_selector = TestSelector(sandbox)
+        self.scratchpad = ""
+
+    def update_scratchpad(self, notes: str) -> str:
+        """
+        Overwrites the scratchpad string held in the agent's state.
+        """
+        self.scratchpad = notes
+        return "Scratchpad updated successfully."
 
     def list_files(self, path: str) -> List[str]:
         """
-        Prevent: The agent being overwhelmed by irrelevant files (like compiled 
-        objects or node_modules) or reading the entire repo at once.
-        Using `git ls-files` naturally respects .gitignore.
+        List files in a directory respecting .gitignore.
         """
         safe_path = shlex.quote(path)
         cmd = f"git -C /workspace/repo ls-files {safe_path}"
@@ -38,8 +55,7 @@ class AgentTools:
 
     def read_file(self, path: str, start_line: Optional[int] = None, end_line: Optional[int] = None) -> str:
         """
-        Prevent: The model hallucinating line numbers when constructing a patch. 
-        By returning prefixed line numbers, the model has exact anchors for its edits.
+        Read the contents of a file, returning prefixed line numbers.
         """
         safe_path = shlex.quote(path)
         cmd = f"cat /workspace/repo/{safe_path}"
@@ -60,23 +76,23 @@ class AgentTools:
         for i, line in enumerate(lines[start:end], start=start + 1):
             result.append(f"{i:4d} | {line}")
             
-        return "\n".join(result)
+        result_str = "\n".join(result)
+        if start_line is None and end_line is None:
+            return _truncate(result_str)
+        return result_str
 
-    def search_code(self, query: str, path: Optional[str] = None) -> List[Dict[str, Any]]:
+    def search_code(self, query: str, path: Optional[str] = None) -> str:
         """
-        Prevent: The model blindly reading dozens of files to find a single function.
-        ripgrep (rg) quickly surfaces exact matches with line numbers, saving context.
+        Search for a string or regex using ripgrep.
         """
         safe_query = shlex.quote(query)
         path_arg = shlex.quote(path) if path else "."
-        # rg --json returns structured JSON objects for matches
         cmd = f"rg --json {safe_query} {path_arg}"
         
         stdout, stderr, exit_code = self.sandbox.exec(cmd, timeout=30)
         
-        # ripgrep returns exit code 0 if match found, 1 if no match, 2 if error
         if exit_code == 2:
-            return [{"error": f"Search failed: {stderr}"}]
+            return f"Search failed: {stderr}"
             
         matches = []
         for line in stdout.splitlines():
@@ -97,15 +113,13 @@ class AgentTools:
             except json.JSONDecodeError:
                 continue
                 
-        return matches
+        matches_str = json.dumps(matches, indent=2)
+        return _truncate(matches_str)
 
     def apply_patch(self, diff: str) -> Dict[str, Any]:
         """
-        Prevent: A malformed diff crashing the sandbox quietly with a cryptic git error.
-        Validating with `unidiff` first allows us to return a clean, structured Python
-        error message back to the model so it understands *why* its diff syntax failed.
+        Apply a unified diff patch.
         """
-        # Validate the diff syntax before touching the sandbox
         try:
             patch = PatchSet(diff)
             if len(patch) == 0:
@@ -117,10 +131,9 @@ class AgentTools:
                 "success": False,
                 "error": "Malformed unified diff",
                 "details": str(e),
-                "suggestion": "Ensure the diff has standard unified diff headers (--- a/file\\n+++ b/file) and correct line prefixes (+, -, space)."
+                "suggestion": "Ensure the diff has standard headers (--- a/file\n+++ b/file) and correct line prefixes (+, -, space)."
             }
             
-        # Sandbox execution
         success = self.sandbox.apply_patch(diff)
         if not success:
             return {
@@ -131,28 +144,81 @@ class AgentTools:
             
         return {"success": True}
 
+    def edit_file(self, filepath: str, start_line: int, end_line: int, new_content: str) -> str:
+        """
+        Replaces a line range in a file with new content.
+        """
+        self.changed_files.add(filepath)
+        
+        new_b64 = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
+        
+        py_code = f"""
+import base64, sys, os, py_compile
+file_path = {repr(filepath)}
+start_line = {start_line}
+end_line = {end_line}
+new_content = base64.b64decode('{new_b64}').decode('utf-8')
+
+full_path = os.path.join('/workspace/repo', file_path) if not file_path.startswith('/workspace/repo') else file_path
+
+try:
+    with open(full_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    lines = content.splitlines(keepends=True)
+    backup_content = content
+    
+    start_idx = max(0, start_line - 1)
+    end_idx = min(len(lines), end_line)
+    
+    new_lines = new_content.splitlines(keepends=True)
+    if new_lines and not new_lines[-1].endswith('\\n') and end_idx < len(lines):
+        new_lines[-1] += '\\n'
+        
+    lines[start_idx:end_idx] = new_lines
+    
+    with open(full_path, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+        
+    if full_path.endswith('.py'):
+        try:
+            py_compile.compile(full_path, doraise=True)
+        except Exception as e:
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+            print('Syntax validation failed after edit. Edit reverted. Compile error:\\n' + str(e), file=sys.stderr)
+            sys.exit(1)
+            
+    print('Edit successful.')
+except Exception as e:
+    print('Error: ' + str(e), file=sys.stderr)
+    sys.exit(1)
+"""
+        py_code_b64 = base64.b64encode(py_code.encode('utf-8')).decode('utf-8')
+        cmd = f"python3 -c \"import base64, sys; exec(base64.b64decode('{py_code_b64}').decode('utf-8'))\""
+        
+        stdout, stderr, exit_code = self.sandbox.exec(cmd, timeout=30)
+        
+        if exit_code != 0:
+            return f"Edit failed:\n{stderr.strip() or stdout.strip()}"
+            
+        return "Edit successful."
+
     def replace_file_content(self, file_path: str, target_content: str, replacement_content: str) -> str:
         """
-        Prevent: Model repeatedly failing to format unified diffs exactly right.
         Uses exact string replacement via a short Python script inside the sandbox.
         """
-        import base64
-        
-        # Track changed file
         self.changed_files.add(file_path)
         
-        # We base64 encode strings to pass them safely into the sandbox via bash
         target_b64 = base64.b64encode(target_content.encode('utf-8')).decode('utf-8')
         replace_b64 = base64.b64encode(replacement_content.encode('utf-8')).decode('utf-8')
         
-        # Build the python script that will run inside the sandbox
         py_code = f"""
-import base64, sys, os
+import base64, sys, os, difflib, py_compile
 file_path = {repr(file_path)}
 target = base64.b64decode('{target_b64}').decode('utf-8')
 replacement = base64.b64decode('{replace_b64}').decode('utf-8')
 
-# Ensure we're targeting the right file inside the sandbox
 full_path = os.path.join('/workspace/repo', file_path) if not file_path.startswith('/workspace/repo') else file_path
 
 try:
@@ -160,17 +226,41 @@ try:
         content = f.read()
         
     if target not in content:
-        print('Error: target_content not found exactly in the file. Check whitespace and indentation.', file=sys.stderr)
+        lines = content.splitlines()
+        target_lines = target.splitlines()
+        if target_lines:
+            closest = difflib.get_close_matches(target_lines[0], lines, n=1, cutoff=0.3)
+            if closest:
+                idx = lines.index(closest[0])
+                context_start = max(0, idx - 2)
+                context_end = min(len(lines), idx + 3)
+                context_lines = '\\n'.join(lines[context_start:context_end])
+                print(f'Error: target_content not found exactly in the file. Check whitespace and indentation. The closest existing content (around line {{idx+1}}) is:\\n{{context_lines}}', file=sys.stderr)
+            else:
+                print('Error: target_content not found exactly in the file.', file=sys.stderr)
+        else:
+            print('Error: target_content not found exactly in the file.', file=sys.stderr)
         sys.exit(1)
         
     if content.count(target) > 1:
         print('Error: target_content found multiple times. Provide more lines for unique context.', file=sys.stderr)
         sys.exit(1)
         
+    backup_content = content
+    
     with open(full_path, 'w', encoding='utf-8') as f:
         f.write(content.replace(target, replacement))
         
-    print('File updated successfully.')
+    if full_path.endswith('.py'):
+        try:
+            py_compile.compile(full_path, doraise=True)
+        except Exception as e:
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+            print('Syntax validation failed after edit. Edit reverted. Compile error:\\n' + str(e), file=sys.stderr)
+            sys.exit(1)
+            
+    print('Replacement successful.')
 except Exception as e:
     print('Error: ' + str(e), file=sys.stderr)
     sys.exit(1)
@@ -187,8 +277,7 @@ except Exception as e:
 
     def run_tests(self, test_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Prevent: The agent assuming it fixed the issue just because it wrote a patch.
-        Forces the agent to run the tests and observe real stderr before concluding.
+        Run tests and format output, truncating if necessary.
         """
         selection_method = "model-specified"
         timeout_val = 120
@@ -197,17 +286,16 @@ except Exception as e:
             if not self.changed_files:
                 return {
                     "passed": False,
-                    "error": "You must provide specific test_ids or edit a file first. Running the entire test suite is too slow.",
+                    "error": "You must provide specific test_ids or edit a file first.",
                     "stderr": "",
                     "output": ""
                 }
                 
             test_ids = self.test_selector.select_relevant_tests(list(self.changed_files))
             
-            # Check for config/settings changes
             has_config_change = any(f.endswith('settings.py') or f.endswith('conf.py') or 'config' in f for f in self.changed_files)
             if not test_ids and has_config_change:
-                test_ids = []  # empty implies run full suite in Sandbox logic
+                test_ids = []
                 selection_method = "full-suite-escalation"
                 timeout_val = 600
             else:
@@ -221,17 +309,13 @@ except Exception as e:
                     "output": ""
                 }
         
-        # Override the timeout for run_tests in sandbox if possible, but Sandbox API currently might have it hardcoded.
-        # We will log the selection method.
-        # Let's pass the timeout to run_tests if it accepts it.
-        # We need to check Sandbox run_tests signature.
         try:
             result = self.sandbox.run_tests(test_ids, timeout=timeout_val)
         except TypeError:
-            result = self.sandbox.run_tests(test_ids) # fallback if timeout is not a param
+            result = self.sandbox.run_tests(test_ids)
             
         return {
             "passed": result.passed,
-            "stderr": result.stderr,
-            "output": f"[TEST SELECTION METHOD: {selection_method}]\n" + result.output
+            "stderr": _truncate(result.stderr),
+            "output": f"[TEST SELECTION METHOD: {selection_method}]\n" + _truncate(result.output)
         }

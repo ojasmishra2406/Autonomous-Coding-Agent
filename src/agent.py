@@ -184,7 +184,10 @@ class CodingAgent:
             for turn_attempt in range(3):
                 for p in providers:
                     try:
-                        response = p.call_model(history, SYSTEM_PROMPT)
+                        current_system_prompt = SYSTEM_PROMPT
+                        if getattr(tools_instance, 'scratchpad', None):
+                            current_system_prompt += f"\n\n=== SCRATCHPAD ===\nYour notes so far:\n{tools_instance.scratchpad}"
+                        response = p.call_model(history, current_system_prompt)
                         latency_ms = (time.time() - step_start) * 1000
                         time.sleep(2)
                         provider_used = p.__class__.__name__.replace('Provider', '').lower()

@@ -36,10 +36,10 @@ class Sandbox:
             print(f"Building {tag} image based on {base_image}. This may take a moment...")
             dockerfile = f"""FROM {base_image}
 RUN if [ "{base_image}" = "python:3.7-slim" ]; then \
-    sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list && \
+    sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list && \
     sed -i 's|security.debian.org|archive.debian.org/|g' /etc/apt/sources.list && \
     sed -i '/stretch-updates/d' /etc/apt/sources.list && \
-    sed -i '/buster-updates/d' /etc/apt/sources.list; fi
+    sed -i '/buster-updates/d' /etc/apt/sources.list || true; fi
 RUN apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false && apt-get install -y git build-essential ripgrep && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 RUN pip install --upgrade pip pytest

@@ -10,7 +10,9 @@
           "description": "The directory path to list files for. Use '.' for the repository root."
         }
       },
-      "required": ["path"]
+      "required": [
+        "path"
+      ]
     }
   },
   {
@@ -32,7 +34,9 @@
           "description": "Optional ending line number (1-indexed)."
         }
       },
-      "required": ["path"]
+      "required": [
+        "path"
+      ]
     }
   },
   {
@@ -50,7 +54,9 @@
           "description": "Optional path to restrict the search to a specific directory or file."
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -64,12 +70,14 @@
           "description": "The unified diff string to apply. Must include proper '--- a/file' and '+++ b/file' headers."
         }
       },
-      "required": ["diff"]
+      "required": [
+        "diff"
+      ]
     }
   },
   {
     "name": "replace_file_content",
-    "description": "Replaces a specific block of text in a file with new content. HIGHLY RECOMMENDED over apply_patch for most edits.",
+    "description": "Replaces a specific block of text in a file with new content. Use this as a fallback if edit_file is not suitable.",
     "parameters": {
       "type": "OBJECT",
       "properties": {
@@ -86,7 +94,11 @@
           "description": "The new content to insert in place of the target_content."
         }
       },
-      "required": ["file_path", "target_content", "replacement_content"]
+      "required": [
+        "file_path",
+        "target_content",
+        "replacement_content"
+      ]
     }
   },
   {
@@ -103,6 +115,53 @@
           "description": "Optional list of specific test IDs (e.g. file paths or pytest node IDs) to run. If omitted, runs all tests."
         }
       }
+    }
+  },
+  {
+    "name": "edit_file",
+    "description": "Replaces a line range in a file with new content. HIGHLY RECOMMENDED over replace_file_content as it avoids exact-match whitespace issues. Line ranges are inclusive.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "filepath": {
+          "type": "STRING",
+          "description": "The path to the file to modify."
+        },
+        "start_line": {
+          "type": "INTEGER",
+          "description": "The starting line number (1-indexed) to replace."
+        },
+        "end_line": {
+          "type": "INTEGER",
+          "description": "The ending line number (1-indexed) to replace."
+        },
+        "new_content": {
+          "type": "STRING",
+          "description": "The new content to insert in place of the specified line range."
+        }
+      },
+      "required": [
+        "filepath",
+        "start_line",
+        "end_line",
+        "new_content"
+      ]
+    }
+  },
+  {
+    "name": "update_scratchpad",
+    "description": "Overwrites your persistent scratchpad. Use this to take notes, store intermediate findings, or write a plan. The scratchpad is injected into your system prompt on every turn.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "notes": {
+          "type": "STRING",
+          "description": "The new contents of the scratchpad."
+        }
+      },
+      "required": [
+        "notes"
+      ]
     }
   }
 ]

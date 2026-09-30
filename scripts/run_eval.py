@@ -82,7 +82,7 @@ def main():
     args = parser.parse_args()
 
     tasks: List[Task] = []
-    with open("data/eval_tasks.jsonl", "r", encoding="utf-8") as f:
+    with open("data/eval_heldout.jsonl", "r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue

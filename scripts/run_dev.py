@@ -72,10 +72,11 @@ def main():
     parser.add_argument("--fresh", action="store_true", help="Clear runs.db before starting")
     parser.add_argument("--max-tasks", type=int, default=None, help="Maximum number of tasks to run.")
     parser.add_argument("--resume-from", type=str, default=None, help="Force resume from a specific task ID, skipping everything before it.")
+    parser.add_argument("--max-steps", type=int, default=15, help="Max steps per task.")
     args = parser.parse_args()
 
     tasks: List[Task] = []
-    with open("data/dev_tasks.jsonl", "r", encoding="utf-8") as f:
+    with open("data/subset_tasks.jsonl", "r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -118,7 +119,7 @@ def main():
         sandbox.start(repo_url=f"https://github.com/{task.repo}.git", commit_sha=task.base_commit, instance_id=task.instance_id)
         
         try:
-            result = agent.solve(task, sandbox, max_steps=15, allow_fallback=True)
+            result = agent.solve(task, sandbox, max_steps=args.max_steps, allow_fallback=True)
             print(f"[{i}/{total}] Finished {task.instance_id} with status: {result.status.value}")
             
             if result.final_patch:

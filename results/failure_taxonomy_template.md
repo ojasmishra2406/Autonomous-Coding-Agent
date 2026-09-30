@@ -2,4 +2,8 @@
 
 | Instance ID | Category | Notes |
 |-------------|----------|-------|
-| astropy__astropy-6938 | | |
+| django__django-12286 | | |
+| django__django-12470 | | |
+| django__django-12497 | | |
+| django__django-12856 | | |
+| django__django-12915 | | |
